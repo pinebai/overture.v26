@@ -127,12 +127,16 @@ inline double pow(int x1,int x2 ){ return x2>0 ? rounder(pow(double(x1),double(x
 inline double sqrt(int x) { return sqrt(double(x)); }
 #endif
 
-#ifndef __KCC
+#if !defined(__KCC) && (!defined(__GNUC__) || __GNUC__ < 7)
 inline float atan2( float  x1, float  x2 ){ return atan2(double(x1),double(x2)); } 
 #endif
 inline float atan2(double x1, float  x2 ){ return atan2(double(x1),double(x2)); } 
 inline float atan2( float  x1,double x2 ){ return atan2(double(x1),double(x2)); } 
+
+#if !defined(__GNUC__) || __GNUC__ < 7
 inline float fmod( float  x1, float  x2 ){ return fmod(double(x1),double(x2)); } 
+#endif
+
 inline float fmod(double x1, float  x2 ){ return fmod(double(x1),double(x2)); } 
 inline float fmod( float  x1,double x2 ){ return fmod(double(x1),double(x2)); } 
   
