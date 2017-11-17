@@ -1,0 +1,171 @@
+eval 'exec perl -S $0 ${1+"$@"}'
+if 0;
+#!/usr/bin/perl
+#
+# perl program to expand perl commands in Overture cmd files.
+#  usage: 
+#         perlcmd outputFile inputFile [args]
+# 
+# Example:
+#  To remove perl from the ogen script cicArg.cmd use:
+#     perlcmd cicNoPerl.cmd cicArg.cmd -order=2 -factor=1
+#  Now ogen can be run without using the perl parser:
+#     ogen -noplot cicNoPerl.cmd
+#
+
+@inputStack = (); # stack of lines created from macros to read first before reading from the file
+
+# --- Main routine to read from the inputStack or FILE ---
+sub readFile #
+{
+  if( $#inputStack >=0 )  # remember $#array gives the last index value -- not the length
+  {
+    $_ = pop(@inputStack);
+  }
+  else
+  {
+    $_ = <FILE>;
+
+    while( /\\$/ )
+    {
+      # printf("***** readFile: continuation line found\n");
+      $cc = <FILE>;
+      $cc =~ s/^[ ]*//; # remove leading blanks
+      chop($_); chop($_);
+      $_ = $_ . $cc;
+    }
+  }
+  $_;
+}
+
+$quiet=0; 
+
+
+if( $#ARGV <1 )
+{
+  printf("perlcmd: WARNING: expecting at least two command lines arguments.\n");
+  printf("perlcmd: Expand and remove perl from Overture command (.cmd) files.\n");
+  printf("  Usage: perlcmd outFile inFile [args]\n");
+  printf("  Example:: perlcmd  cicNoPerl.cmd cicArg.cmd -order=2 -factor=4\n");
+  exit;
+}
+
+use Getopt::Long; 
+use Getopt::Std;
+
+# @fileNames = @ARGV;
+$outputFile          = $ARGV[0];
+$inputFile          = $ARGV[1];
+
+printf("perlcmd: expand perl commands in the Overture command file=[$inputFile].\n");
+
+open(FILE,"$inputFile") || die "cannot open file $inputFile!" ;
+open(OUTFILE,">$outputFile") || die "cannot open output file $outputFile!" ;
+
+while( !eof(FILE) || $#inputStack >=0 )
+{
+  &readFile;
+  $line = $_;
+  chop($line);
+
+  #  printf("line = [$line]\n");
+
+#-   # Concatentate continuation lines
+#-   while( $line =~ "\\\\\$" )
+#-   {
+#-     # printf("+++ continuation line found..\n");
+#-     chop($line);
+#-     $line .= <FILE>;
+#-     chop($line);
+#-     # printf(">> line = [$line]\n");
+#-   }
+  
+
+  # print "line=" . $line . "\n";
+
+  if( $line =~ /^[ \t]*#/ )
+  {
+     # line is a comment starting with "#"
+  }
+  elsif( $line =~ /^[ \t]*\*/ )
+  {
+     # line is a comment starting with "*"
+  }
+
+  elsif( $line =~ ';' )
+  {
+    # print "Line contains a ';' \n";
+    # if( $line =~ "GetOpt" )
+    # {
+    #   print "Line contains GetOpt\n";
+    # }
+    eval( $line );
+    # printf("factor=$factor\n");
+    next;
+  }      
+  elsif( $line =~ '\$' )
+  {
+    # print "Line contains a '\$' \n";
+    $line = eval('"' . $line . '";');
+    # print "after eval: " . $line . "\n";
+  }
+
+  # --- check for include's ---
+  if( $line =~ /^[ \t]*include/ )
+  {
+    # This is an include statement
+    # if( $quiet==0 ){ printf("--perlcmd-- Include found: line=[$line]\n"); }
+    print OUTFILE "# $line\n";  # output the original line as a comment
+
+    $includeFile=$line;
+    # chop($includeFile);
+    $includeFile =~ s/^[ \t]*include[ \t]*(.*)/\1/;
+    $includeFile =~ s/[\"\']//g;  # remove quotes "
+    $includeFile =~ s/[ \t]*$//; # remove trailing blanks
+      
+    if( -e "$includeFile" )
+    {
+      $includeFile="$includeFile";
+      if( $quiet==0 ){ printf("perlcmd: include file found [$includeFile]\n"); }
+    }
+    else
+    {
+      printf("perlcmd:ERROR: include file [$includeFile] NOT FOUND \n"); 
+    }
+
+    open(INCLUDE,"$includeFile") || die "perlcmd: cannot open include file $includeFile!" ;
+
+    @block =();
+    while( <INCLUDE> )
+    { 
+      if( /^[ \t]*$/ ){ next; }  # skip blanks lines
+
+      while( /\\$/ )
+      { # concatentate continuation lines
+	  $cc = <INCLUDE>;
+	  $cc =~ s/^[ ]*//; # remove leading blanks
+	  chop($_); chop($_);
+	  $_ = $_ . $cc;
+      }
+
+      push(@block,$_);
+    }          
+    # now push onto the input stack in reverse order
+    for( $ii=$#block; $ii>=0; $ii-- )  
+    {
+      # printf("****push [$block[$ii]]");
+     push(@inputStack,$block[$ii]);
+    }
+    close(INCLUDE);
+  }
+  else
+  {
+    print OUTFILE $line . "\n";
+  }
+}
+
+close(OUTFILE);
+close(FILE);
+
+printf("perlcmd: output written to file [$outputFile].\n");
+
